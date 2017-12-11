@@ -1,6 +1,7 @@
-import torch.nn as nn
-from torch.autograd import Variable
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 
 class ConvLSTMCell(nn.Module):
@@ -8,7 +9,7 @@ class ConvLSTMCell(nn.Module):
     def __init__(self, input_size, input_dim, hidden_dim, kernel_size, bias):
         """
         Initialize ConvLSTM cell.
-        
+
         Parameters
         ----------
         input_size: (int, int)
@@ -22,7 +23,6 @@ class ConvLSTMCell(nn.Module):
         bias: bool
             Whether or not to add the bias.
         """
-
         super(ConvLSTMCell, self).__init__()
 
         self.height, self.width = input_size
@@ -32,30 +32,32 @@ class ConvLSTMCell(nn.Module):
         self.kernel_size = kernel_size
         self.padding     = kernel_size[0] // 2, kernel_size[1] // 2
         self.bias        = bias
-        
+
         self.conv = nn.Conv2d(in_channels=self.input_dim + self.hidden_dim,
                               out_channels=4 * self.hidden_dim,
                               kernel_size=self.kernel_size,
                               padding=self.padding,
                               bias=self.bias)
 
+
     def forward(self, input_tensor, cur_state):
-        
         h_cur, c_cur = cur_state
-        
+
         combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
-        
+
         combined_conv = self.conv(combined)
-        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1) 
-        i = torch.sigmoid(cc_i)
-        f = torch.sigmoid(cc_f)
-        o = torch.sigmoid(cc_o)
-        g = torch.tanh(cc_g)
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
+
+        i = F.sigmoid(cc_i)
+        f = F.sigmoid(cc_f)
+        o = F.sigmoid(cc_o)
+        g = F.tanh(cc_g)
 
         c_next = f * c_cur + i * g
-        h_next = o * torch.tanh(c_next)
-        
+        h_next = o * F.tanh(c_next)
+
         return h_next, c_next
+
 
     def init_hidden(self, batch_size):
         return (Variable(torch.zeros(batch_size, self.hidden_dim, self.height, self.width)).cuda(),
@@ -100,14 +102,14 @@ class ConvLSTM(nn.Module):
 
     def forward(self, input_tensor, hidden_state=None):
         """
-        
+
         Parameters
         ----------
-        input_tensor: todo 
+        input_tensor: todo
             5-D Tensor either of shape (t, b, c, h, w) or (b, t, c, h, w)
         hidden_state: todo
             None. todo implement stateful
-            
+
         Returns
         -------
         last_state_list, layer_output
