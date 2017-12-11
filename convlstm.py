@@ -9,7 +9,6 @@ class ConvLSTMCell(nn.Module):
     def __init__(self, input_size, input_dim, hidden_dim, kernel_size, bias):
         """
         Initialize ConvLSTM cell.
-
         Parameters
         ----------
         input_size: (int, int)
@@ -39,10 +38,10 @@ class ConvLSTMCell(nn.Module):
                               padding=self.padding,
                               bias=self.bias)
 
-    def forward(self, input_tensor, cur_state):
-        h_cur, c_cur = cur_state
+    def forward(self, input, prev_state):
+        h_prev, c_prev = prev_state
 
-        combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
+        combined = torch.cat((input, h_prev), dim=1)  # concatenate along channel axis
 
         combined_conv = self.conv(combined)
         cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
@@ -52,14 +51,17 @@ class ConvLSTMCell(nn.Module):
         o = F.sigmoid(cc_o)
         g = F.tanh(cc_g)
 
-        c_next = f * c_cur + i * g
-        h_next = o * F.tanh(c_next)
+        c_cur = f * c_prev + i * g
+        h_cur = o * F.tanh(c_cur)
 
-        return h_next, c_next
+        return h_cur, c_cur
 
-    def init_hidden(self, batch_size):
-        return (Variable(torch.zeros(batch_size, self.hidden_dim, self.height, self.width)).cuda(),
-                Variable(torch.zeros(batch_size, self.hidden_dim, self.height, self.width)).cuda())
+    def init_hidden(self, batch_size, cuda=True):
+        state = (Variable(torch.zeros(batch_size, self.hidden_dim, self.height, self.width)),
+                 Variable(torch.zeros(batch_size, self.hidden_dim, self.height, self.width)))
+        if cuda:
+            state = (state[0].cuda(), state[1].cuda())
+        return state
 
 
 class ConvLSTM(nn.Module):
@@ -98,7 +100,7 @@ class ConvLSTM(nn.Module):
 
         self.cell_list = nn.ModuleList(cell_list)
 
-    def forward(self, input_tensor, hidden_state=None):
+    def forward(self, input, hidden_state=None):
         """
 
         Parameters
@@ -114,46 +116,43 @@ class ConvLSTM(nn.Module):
         """
         if not self.batch_first:
             # (t, b, c, h, w) -> (b, t, c, h, w)
-            input_tensor.permute(1, 0, 2, 3, 4)
+            input = input.permute(1, 0, 2, 3, 4)
 
-        # Implement stateful ConvLSTM
-        if hidden_state is not None:
-            raise NotImplementedError()
-        else:
-            hidden_state = self._init_hidden(batch_size=input_tensor.size(0))
+
+        if hidden_state is None:
+            hidden_state = self.get_init_states(batch_size=input_tensor.size(0))
 
         layer_output_list = []
         last_state_list   = []
 
-        seq_len = input_tensor.size(1)
-        cur_layer_input = input_tensor
+        seq_len = input.size(1)
+        cur_layer_input = input
 
         for layer_idx in range(self.num_layers):
-
             h, c = hidden_state[layer_idx]
             output_inner = []
             for t in range(seq_len):
-
-                h, c = self.cell_list[layer_idx](input_tensor=cur_layer_input[:, t, :, :, :],
-                                                 cur_state=[h, c])
+                h, c = self.cell_list[layer_idx](input=cur_layer_input[:, t, :, :, :]
+                                                 , prev_state=[h, c])
                 output_inner.append(h)
 
             layer_output = torch.stack(output_inner, dim=1)
             cur_layer_input = layer_output
 
             layer_output_list.append(layer_output)
-            last_state_list.append([h, c])
+            last_state_list.append((h, c))
 
-        if not self.return_all_layers:
-            layer_output_list = layer_output_list[-1:]
-            last_state_list   = last_state_list[-1:]
 
-        return layer_output_list, last_state_list
+        layer_output = layer_output_list[-1]
+        if not self.batch_first:
+            layer_output = layer_output.permute(1, 0, 2, 3, 4)
 
-    def _init_hidden(self, batch_size):
+        return layer_output, last_state_list
+
+    def get_init_states(self, batch_size, cuda=True):
         init_states = []
         for i in range(self.num_layers):
-            init_states.append(self.cell_list[i].init_hidden(batch_size))
+            init_states.append(self.cell_list[i].init_hidden(batch_size, cuda))
         return init_states
 
     @staticmethod
