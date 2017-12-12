@@ -27,16 +27,16 @@ dloader = torch.utils.data.DataLoader(raw_data, batch_size=b_size,
 
 encoder = ConvLSTM(input_size=(28,28),
                    input_dim=1,
-                   hidden_dim=[1],
+                   hidden_dim=[2,1],
                    kernel_size=(3,3),
-                   num_layers=1,
+                   num_layers=2,
                   )
 
 decoder = ConvLSTM(input_size=(28,28),
                    input_dim=1,
-                   hidden_dim=[1],
+                   hidden_dim=[2,1],
                    kernel_size=(3,3),
-                   num_layers=1,
+                   num_layers=2,
                   )
 
 encoder.cuda()
