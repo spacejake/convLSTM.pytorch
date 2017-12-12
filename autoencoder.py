@@ -1,17 +1,13 @@
 import torch
+import torch.nn as nn
 
 import torch.optim as optim
 from torch.autograd import Variable
-
-import torch.nn as nn
-import torch.nn.functional as F
 
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 
 import torchvision.utils
-
-import numpy as np
 
 from convlstm import ConvLSTM
 from utils import *
@@ -55,15 +51,14 @@ s = 1
 for e in range(100):
     for i, v in enumerate(dloader):
         optimizer.zero_grad()
-
         images =  Variable(v[0].cuda()).view(4, 32, 1, 28, 28)
 
         ########
         #Encoder
         ########
-
         hidden = encoder.get_init_states(32)
         _, encoder_state = encoder(images.clone(), hidden)
+
         ########
         #Decoder
         ########
@@ -76,7 +71,6 @@ for e in range(100):
         #######
         #loss##
         #######
-
         cut = threshold(decoder_out)
         loss = crit(cut, rev_images)
 

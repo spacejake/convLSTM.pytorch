@@ -132,8 +132,8 @@ class ConvLSTM(nn.Module):
             h, c = hidden_state[layer_idx]
             output_inner = []
             for t in range(seq_len):
-                h, c = self.cell_list[layer_idx](input=cur_layer_input[:, t, :, :, :]
-                                                 , prev_state=[h, c])
+                h, c = self.cell_list[layer_idx](input=cur_layer_input[:, t, :, :, :],
+                                                 prev_state=[h, c])
                 output_inner.append(h)
 
             layer_output = torch.stack(output_inner, dim=1)
