@@ -40,7 +40,6 @@ class ConvLSTMCell(nn.Module):
 
     def forward(self, input, prev_state):
         h_prev, c_prev = prev_state
-
         combined = torch.cat((input, h_prev), dim=1)  # concatenate along channel axis
 
         combined_conv = self.conv(combined)
@@ -120,7 +119,7 @@ class ConvLSTM(nn.Module):
 
 
         if hidden_state is None:
-            hidden_state = self.get_init_states(batch_size=input_tensor.size(0))
+            hidden_state = self.get_init_states(batch_size=input.size(0))
 
         layer_output_list = []
         last_state_list   = []
