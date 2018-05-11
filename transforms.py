@@ -25,7 +25,7 @@ class RandomNoise(object):
         #variance = np.var(img)
         #print("var: ", variance)
         variance=0.5
-        return random_noise(img, var=(variance*0.9) )
+        return random_noise(img, var=(variance*0.7) )
 
     def __repr__(self):
         return self.__class__.__name__ + '(seed={0})'.format(self.seed)

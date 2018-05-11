@@ -1,6 +1,6 @@
 
 import itertools
-
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -36,18 +36,16 @@ dloader = torch.utils.data.DataLoader(raw_data, batch_size=batch_size,
 
 encoder = ConvLSTM(input_size=(7,7),
                    input_dim=1,
-                   hidden_dim=[1,2,4,8,16],
+                   hidden_dim=[16,32,64],
                    kernel_size=(3,3),
-                   num_layers=5,
-                   #batch_first=True,
+                   num_layers=3,
                   )
 
 decoder = ConvLSTM(input_size=(7,7),
-                   input_dim=16,
-                   hidden_dim=[16,8,4,2,1],
+                   input_dim=64,
+                   hidden_dim=[32,16,1],
                    kernel_size=(3,3),
-                   num_layers=5,
-                   #batch_first=True,
+                   num_layers=3,
                   )
 
 encoder.cuda()
@@ -59,11 +57,14 @@ crit.cuda()
 threshold = nn.Threshold(0., 0.0)
 #params = list(encoder.parameters()) + list(decoder.parameters())
 params = itertools.chain(encoder.parameters(), decoder.parameters())
-optimizer = optim.Adam(params)#, weight_decay=1e-4)
+optimizer = optim.Adam(params)#, lr=0.01)#, weight_decay=1e-4)
 
 # Decay LR by a factor of 0.1 every 5 epochs
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+#exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer, step_size=3, gamma=0.1)
 
+#exp_lr_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=0, threshold=1e-4, mode='min',
+#                                             factor=0.1, min_lr=1e-6,verbose=True)
 s = 1
 
 
@@ -71,8 +72,11 @@ s = 1
 #    for i in images:
 #        print("image dim: ", i.size())
 
+prev_enc_hidden_state = None
+prev_dec_hidden_state = None
+
 for e in range(100):
-    exp_lr_scheduler.step()
+    ep_loss = []
     for i, v in enumerate(dloader):
         optimizer.zero_grad()
         # Split batch of 4 28x28x1 images into
@@ -99,8 +103,10 @@ for e in range(100):
         ########
         #Encoder
         ########
-        encoder_out, encoder_state = encoder(images.clone())
-
+        encoder_out, enc_hidden_state = encoder(images.clone(), prev_enc_hidden_state)
+        #prev_enc_hidden_state = []
+        #for hs in enc_hidden_state:
+        #    prev_enc_hidden_state.append(Variable(hs.data, requires_grad=True))
         ########
         #Decoder
         ########
@@ -108,7 +114,11 @@ for e in range(100):
         #rev_images = flip_var(images, 0)
         #dec_input = torch.cat((Variable(torch.zeros(1,32,1,28,28).cuda()), rev_images[:-1,:,:,:,:]), 0)
 
-        decoder_out, _ = decoder(encoder_out)#, encoder_state)
+        decoder_out, dec_hidden_state = decoder(encoder_out, prev_dec_hidden_state)#, encoder_state)
+
+        #prev_dec_hidden_state = []
+        #for hs in enc_hidden_state:
+        #    prev_dec_hidden_state.append(Variable(hs.data, requires_grad=True))
 
         #######
         #loss##
@@ -118,7 +128,7 @@ for e in range(100):
 
         cut = threshold(decoder_out)
         loss = crit(cut, gt)
-
+        ep_loss.append(loss.data.cpu().numpy())
 
         #print("decoder_out: ", decoder_out.size())
         #output = decoder_out.contiguous().view(batch_size,  1, 28, 28)
@@ -131,11 +141,13 @@ for e in range(100):
         loss.backward()
         optimizer.step()
 
+
         # Merge each image back into 1 28x28 image
         #final_out = decoder_out.clone().view(batch_size, 1, 1, 28, 28)
 
         if i % 100 == 0:
             print("Epoch: {0} | Iter: {1} | LR:{2}".format(e, i, exp_lr_scheduler.get_lr()[0]))
+            #print("Epoch: {0} | Iter: {1}".format(e, i))
             print("Loss: {0}".format(loss.data.cpu().numpy()))#[0]))
             print("===========================")
 
@@ -151,4 +163,7 @@ for e in range(100):
                                                                          e,i),
                                          nrow=3)
             s += 1
-
+    avg_loss = sum(ep_loss)/len(ep_loss)
+    print("Average epoch loss: ", avg_loss)
+    #exp_lr_scheduler.step(avg_loss)
+    exp_lr_scheduler.step()
